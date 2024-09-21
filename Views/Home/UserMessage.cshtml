@@ -1,0 +1,128 @@
+﻿@model IEnumerable<Message>
+@{
+    ViewData["Title"] = "Chat";
+}
+
+<style>
+    /* Add your styles here */
+    body {
+        background-color: #f9fafb; /* Light background */
+    }
+
+    .container {
+        margin-top: 20px;
+    }
+
+    .message {
+        margin: 10px 0;
+    }
+
+    .text-right {
+        text-align: right;
+    }
+
+    .text-left {
+        text-align: left;
+    }
+
+    .bg-blue-500 {
+        background-color: #3b82f6; /* Tailwind blue */
+    }
+
+    .bg-gray-200 {
+        background-color: #e5e7eb; /* Tailwind gray */
+    }
+</style>
+
+<div class="container mx-auto p-4">
+    <div class="bg-white rounded-lg shadow-md p-4">
+        <h2 class="text-lg font-semibold">Chat with @ViewBag.ReceiverName (ID: @ViewBag.ReceiverId)</h2>
+        <div id="messagesList" class="h-96 overflow-y-scroll border p-4 rounded-lg bg-gray-50">
+            @foreach (var message in Model)
+            {
+                <div class="message my-2 @((message.SenderId == ViewBag.CurrentUserId ? "text-right" : "text-left"))">
+                    <div class="flex @((message.SenderId == ViewBag.CurrentUserId ? "justify-end" : "justify-start"))">
+                        <span class="inline-block rounded-lg p-2 @((message.SenderId == ViewBag.CurrentUserId ? "bg-blue-500 text-white" : "bg-gray-200 text-black"))">
+                            @message.MessageText
+                        </span>
+                    </div>
+                    <span class="text-sm text-gray-500">@message.Timestamp.ToString("g")</span>
+                </div>
+            }
+        </div>
+        <div class="flex mt-4">
+            <input type="text" id="messageInput" class="flex-1 border rounded-lg p-2" placeholder="Type a message..." />
+            <button class="ml-2 bg-blue-500 text-white rounded-lg px-4" onclick="sendMessage()">Send</button>
+        </div>
+        <input type="hidden" id="receiverId" value="@ViewBag.ReceiverId" />
+        <input type="hidden" id="currentUserId" value="@ViewBag.CurrentUserId" />
+    </div>
+</div>
+
+
+
+@section Scripts {
+    <script>
+        const connection = new signalR.HubConnectionBuilder().withUrl("/chathub").build();
+
+        connection.on("ReceiveMessage", function (senderId, message) {
+            console.log(`Message received from ${senderId}: ${message}`); // Debug log for incoming messages
+
+            // Create a new message element
+            var li = document.createElement("div");
+            li.classList.add("message");
+            li.innerHTML = `<div class="flex ${senderId == document.getElementById("currentUserId").value ? "justify-end" : "justify-start"}">
+                                                        <span class="inline-block rounded-lg p-2 ${senderId == document.getElementById("currentUserId").value ? "bg-blue-500 text-white" : "bg-gray-200 text-black"}">${message}</span>
+                                            </div>`;
+
+            // Append the new message to the messages list
+            document.getElementById("messagesList").appendChild(li);
+
+            // Scroll to the bottom of the messages list
+            var messagesList = document.getElementById("messagesList");
+            messagesList.scrollTop = messagesList.scrollHeight;
+        });
+
+        connection.start().then(() => {
+            console.log("Connected to SignalR hub.");
+        }).catch(err => console.error("Connection error: ", err));
+
+        function checkConnectionState() {
+            const state = connection.state;
+            console.log("Current connection state:", state); // Debug log for connection state
+            return state;
+        }
+
+        function sendMessage() {
+            var message = document.getElementById("messageInput").value;
+            var receiverId = document.getElementById("receiverId").value;
+            var currentUserId = document.getElementById("currentUserId").value;
+
+            if (message.trim() === "") return;
+
+            // Append sent message to the message list
+            var li = document.createElement("div");
+            li.classList.add("message");
+            li.innerHTML = `<div class="flex justify-end">
+                                                <span class="inline-block rounded-lg p-2 bg-blue-500 text-white">${message}</span>
+                                            </div>`;
+            document.getElementById("messagesList").appendChild(li);
+
+            connection.invoke("SendMessage", parseInt(currentUserId), parseInt(receiverId), message)
+                .then(() => {
+                    console.log("Message sent successfully.");
+                    checkConnectionState(); // Check connection state after sending message
+                })
+                .catch(err => {
+                    console.error("Error sending message: ", err);
+                    alert("Error sending message: " + err.message + "\nCheck server logs for details.");
+                });
+
+            document.getElementById("messageInput").value = ''; // Clear input
+
+            // Scroll to the bottom of the messages list
+            var messagesList = document.getElementById("messagesList");
+            messagesList.scrollTop = messagesList.scrollHeight;
+        }
+    </script>
+}
